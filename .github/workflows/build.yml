@@ -58,7 +58,7 @@ jobs:
           grep -E \
             'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
             .config
-      - name: Check DVFSRC header
+ - name: Check DVFSRC header
         working-directory: kernel
         run: |
           echo "Searching for header..."
@@ -66,6 +66,13 @@ jobs:
 
           echo "Checking DVFSRC directory..."
           ls -la drivers/devfreq/helio-dvfsrc-v3/
+
+      - name: Fix DVFSRC include path
+        working-directory: kernel
+        run: |
+          echo 'ccflags-y += -I$(src)' >> drivers/devfreq/helio-dvfsrc-v3/Makefile
+          echo "=== DVFSRC Makefile ==="
+          cat drivers/devfreq/helio-dvfsrc-v3/Makefile
 
       - name: Build kernel
         working-directory: kernel
