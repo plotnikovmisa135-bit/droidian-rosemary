@@ -17,13 +17,13 @@ jobs:
 
       - name: Setup Droidian Build Environment
         run: |
-          git clone https://github.com/droidian-releng/droidian-build-tools.git tools
+          git clone https://https://gabutgadungan/android_kernel_xiaomi_rosemary tools
           cd tools && sudo ./setup.sh || true
           cd ..
 
       - name: Clone Halium 13 Kernel Source
         run: |
-          git clone https://github.com --depth=1 kernel
+          git clone --depth=1 https://https://gabutgadungan/android_kernel_xiaomi_rosemary kernel
 
       - name: Configure Kernel Defconfig
         run: |
@@ -37,7 +37,6 @@ jobs:
 
       - name: Execute Droidian Image Generation
         run: |
-          # Используем официальные бинарники сборщика из репозитория инструментов
           ./tools/bin/droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build || true
 
       - name: Upload Flashable Components
