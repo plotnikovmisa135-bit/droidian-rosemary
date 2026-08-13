@@ -12,10 +12,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            bc bison build-essential flex \
+            bc \
+            bison \
+            build-essential \
+            flex \
             gcc-aarch64-linux-gnu \
-            git libssl-dev libelf-dev \
-            lz4 python3 rsync
+            git \
+            libssl-dev \
+            libelf-dev \
+            lz4 \
+            python3 \
+            rsync
 
       - name: Clone kernel
         run: |
@@ -25,22 +32,71 @@ jobs:
             https://github.com/gabutgadungan/android_kernel_xiaomi_rosemary.git \
             kernel
 
-      - name: Configure
+      - name: Verify source tree
         working-directory: kernel
         run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
+          test -f drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-qos.h
 
+          echo "DVFSRC header exists"
+
+          echo "=== ksm_flock references ==="
+          grep -Rns \
+            -E 'ksm_flock[[:space:]]*\(' \
+            include block drivers \
+            2>/dev/null || true
+
+      - name: Fix DVFSRC header
+        working-directory: kernel
+        run: |
+          sed -i \
+            's/#include <helio-dvfsrc-qos\.h>/#include "helio-dvfsrc-qos.h"/' \
+            drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-qos.c
+
+          echo "=== DVFSRC include ==="
+          grep -n \
+            'helio-dvfsrc-qos.h' \
+            drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-qos.c
+
+      - name: Inspect keyslot manager
+        working-directory: kernel
+        run: |
+          echo "=== keyslot-manager.h ==="
+          sed -n '70,125p' include/linux/keyslot-manager.h
+
+          echo
+          echo "=== ksm_flock definitions ==="
+          grep -Rns \
+            -E '^[[:space:]]*(static[[:space:]]+)?(inline[[:space:]]+)?(void|int)[[:space:]]+ksm_flock[[:space:]]*\(' \
+            . \
+            --exclude-dir=.git \
+            2>/dev/null || true
+
+          echo
+          echo "=== keyslot files ==="
+          find . -type f \
+            \( -iname '*keyslot*' -o -iname '*blk-crypto*' \) \
+            -print
+
+      - name: Configure
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+        run: |
           make rosemary_defconfig
           make olddefconfig
 
       - name: Build
         working-directory: kernel
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-
-          make -j"$(nproc)" Image.gz dtbs
+          make -j"$(nproc)" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            Image.gz \
+            dtbs
 
       - name: Verify
         working-directory: kernel
@@ -50,6 +106,7 @@ jobs:
           echo "=== SUCCESS ==="
           ls -lh arch/arm64/boot/Image.gz
 
+          echo
           echo "=== DTBs ==="
           find arch/arm64/boot/dts \
             -type f \
@@ -64,3 +121,4 @@ jobs:
             kernel/arch/arm64/boot/Image.gz
             kernel/arch/arm64/boot/dts/**/*.dtb
             kernel/arch/arm64/boot/dts/**/*.dtbo
+          if-no-files-found: error
