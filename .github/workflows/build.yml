@@ -73,7 +73,24 @@ jobs:
           echo 'ccflags-y += -I$(src)' >> drivers/devfreq/helio-dvfsrc-v3/Makefile
           echo "=== DVFSRC Makefile ==="
           cat drivers/devfreq/helio-dvfsrc-v3/Makefile
+      - name: Check missing headers
+        working-directory: kernel
+        run: |
+          echo "=== extcon_usb.h ==="
+          find . -type f -name 'extcon_usb.h' -print
 
+          echo
+          echo "=== keyslot-manager.h ==="
+          find . -type f -name 'keyslot-manager.h' -print
+
+          echo
+          echo "=== DVFSRC include flags ==="
+          grep -n 'ccflags-y' drivers/devfreq/helio-dvfsrc-v3/Makefile
+      - name: Inspect ksm_flock
+        working-directory: kernel
+        run: |
+          echo "=== ksm_flock references ==="
+          grep -Rni "ksm_flock" include block drivers 2>/dev/null | head -100
       - name: Build kernel
         working-directory: kernel
         env:
