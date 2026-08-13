@@ -1,4 +1,4 @@
-name: Droidian Installer Build
+name: Build Halium 13 Kernel
 
 on:
   workflow_dispatch:
@@ -6,45 +6,126 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+
     steps:
       - name: Checkout adaptation files
         uses: actions/checkout@v4
 
-      - name: Install Base System Tools
+      - name: Install build dependencies
         run: |
-          sudo apt update
-          sudo apt install -y debos qemu-user-static python3-parted python3-pip git python3-setuptools python3-wheel
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            build-essential \
+            ccache \
+            flex \
+            gcc-aarch64-linux-gnu \
+            git \
+            libssl-dev \
+            libelf-dev \
+            lz4 \
+            make \
+            python3 \
+            rsync \
+            unzip \
+            wget \
+            xz-utils
 
-      - name: Setup Droidian Build Environment
+      - name: Clone Halium 13 kernel
         run: |
-          git clone https://github.com/gabutgadungan/android_kernel_xiaomi_rosemary.git tools
-          cd tools && sudo ./setup.sh || true
-          cd ..
+          git clone --depth=1 \
+            --branch rosemary-13 \
+            https://github.com/gabutgadungan/android_kernel_xiaomi_rosemary.git \
+            kernel
 
-      - name: Clone Halium 13 Kernel Source
+      - name: Configure kernel
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          git clone --depth=1 https://github.com/gabutgadungan/android_kernel_xiaomi_rosemary.git kernel
+          make rosemary_defconfig
 
-      - name: Configure Kernel Defconfig
+          ./scripts/config --enable NAMESPACES
+          ./scripts/config --enable CGROUPS
+          ./scripts/config --enable DEVTMPFS
+          ./scripts/config --enable DEVTMPFS_MOUNT
+
+          make olddefconfig
+
+          echo "=== Important configuration ==="
+          grep -E \
+            'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
+            .config
+
+      - name: Build kernel
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
         run: |
-          cd kernel
-          make rosemary_defconfig ARCH=arm64
-          sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
-          sed -i 's/# CONFIG_CGROUPS is not set/CONFIG_CGROUPS=y/' .config
-          sed -i 's/# CONFIG_DEVTMPFS is not set/CONFIG_DEVTMPFS=y/' .config
-          cp .config arch/arm64/configs/rosemary_defconfig
-          cd ..
+          make -j"$(nproc)" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            Image.gz dtbs modules
 
-      - name: Execute Droidian Image Generation
+      - name: Show build output
+        working-directory: kernel
         run: |
-          ./tools/bin/droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build || true
+          echo "=== Kernel ==="
+          ls -lh arch/arm64/boot/Image*
+          
+          echo
+          echo "=== Device trees ==="
+          find arch/arm64/boot/dts -type f \
+            \( -name '*.dtb' -o -name '*.dtbo' \) \
+            -print
 
-      - name: Upload Flashable Components
+          echo
+          echo "=== Modules ==="
+          find . -name '*.ko' -type f | head -50
+
+      - name: Collect kernel artifacts
+        run: |
+          mkdir -p out
+
+          cp kernel/arch/arm64/boot/Image.gz \
+            out/Image.gz
+
+          if [ -f kernel/arch/arm64/boot/Image ]; then
+            cp kernel/arch/arm64/boot/Image \
+              out/Image
+          fi
+
+          find kernel/arch/arm64/boot/dts \
+            -type f \
+            \( -name '*.dtb' -o -name '*.dtbo' \) \
+            -exec cp --parents {} out/ \;
+
+          find kernel \
+            -type f \
+            -name '*.ko' \
+            -exec cp --parents {} out/ \;
+
+          cp kernel/.config out/kernel.config
+
+          git -C kernel rev-parse HEAD > out/kernel-commit.txt
+
+      - name: Package artifacts
+        run: |
+          tar -czf rosemary-halium13-kernel.tar.gz -C out .
+
+      - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Droidian-rosemary-Halium13
+          name: rosemary-halium13-kernel
           path: |
-            out/*.zip
-            out/*.img
-            *.zip
-            *.img
+            rosemary-halium13-kernel.tar.gz
+            out/Image
+            out/Image.gz
+            out/kernel.config
+            out/kernel-commit.txt
+            out/arch/
+          if-no-files-found: error
+
