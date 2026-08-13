@@ -1,4 +1,4 @@
-name: Build Halium 13 Kernel
+name: Build Rosemary Kernel
 
 on:
   workflow_dispatch:
@@ -8,174 +8,59 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout adaptation files
-        uses: actions/checkout@v4
-
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            bc \
-            bison \
-            build-essential \
-            ccache \
-            flex \
+            bc bison build-essential flex \
             gcc-aarch64-linux-gnu \
-            git \
-            libssl-dev \
-            libelf-dev \
-            lz4 \
-            make \
-            python3 \
-            rsync \
-            unzip \
-            wget \
-            xz-utils
+            git libssl-dev libelf-dev \
+            lz4 python3 rsync
 
-      - name: Clone Halium 13 kernel
+      - name: Clone kernel
         run: |
-          git clone --depth=1 \
+          git clone \
+            --depth=1 \
             --branch rosemary-13 \
             https://github.com/gabutgadungan/android_kernel_xiaomi_rosemary.git \
             kernel
 
-      - name: Configure kernel
+      - name: Configure
         working-directory: kernel
-        env:
-          ARCH: arm64
-          CROSS_COMPILE: aarch64-linux-gnu-
         run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+
           make rosemary_defconfig
+          make olddefconfig
 
-          ./scripts/config --enable NAMESPACES
-          ./scripts/config --enable CGROUPS
-          ./scripts/config --enable DEVTMPFS
-          ./scripts/config --enable DEVTMPFS_MOUNT
-
-          # Run non-interactive olddefconfig; pipe default answers to avoid CI TTY prompts
-          yes '' | make olddefconfig
-
-          echo "=== Required configuration ==="
-          grep -E \
-            'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
-            .config
-
-      # The MTK DVFSRC source includes its local header
-      # with <...>, so explicitly add its own directory.
-      - name: Fix DVFSRC include path
+      - name: Build
         working-directory: kernel
         run: |
-          echo 'ccflags-y += -I$(src)' \
-            >> drivers/devfreq/helio-dvfsrc-v3/Makefile
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
 
-      # The rosemary kernel tree contains a legacy MediaTek
-      # usb-tcpc driver which expects extcon_usb.h, but the
-      # header is absent from this tree.
-      #
-      # Disable only this optional driver for now so that the
-      # actual kernel can be produced.
-      - name: Disable broken legacy USB TCPC driver
+          make -j"$(nproc)" Image.gz dtbs
+
+      - name: Verify
         working-directory: kernel
         run: |
-          echo "=== extcon configuration ==="
+          test -f arch/arm64/boot/Image.gz
 
-          grep -Rni \
-            'CONFIG.*USB.*TCPC\|CONFIG.*TCPC\|USB_TCPC' \
-            drivers/extcon/mediatek \
-            drivers/extcon \
-            2>/dev/null || true
+          echo "=== SUCCESS ==="
+          ls -lh arch/arm64/boot/Image.gz
 
-          ./scripts/config --disable MTK_USB_TCPC || true
-          ./scripts/config --disable USB_TCPC || true
-
-          # Avoid interactive prompts in CI
-          yes '' | make olddefconfig
-
-      # This old kernel tree has a broken keyslot-manager
-      # declaration. Check whether block crypto is enabled,
-      # and disable it if necessary for producing the kernel.
-      - name: Disable broken block crypto path
-        working-directory: kernel
-        run: |
-          echo "=== Block crypto configuration ==="
-
-          grep -E \
-            'CONFIG_(BLK_DEV|BLK_INLINE|BLK_CRYPTO|FS_ENCRYPTION)' \
-            .config || true
-
-          ./scripts/config --disable BLK_INLINE_ENCRYPTION || true
-          ./scripts/config --disable BLK_ENCRYPTION || true
-          ./scripts/config --disable BLK_CRYPTO || true
-
-          # Avoid interactive prompts in CI
-          yes '' | make olddefconfig
-
-          echo "=== Result ==="
-          grep -E \
-            'CONFIG_(BLK_INLINE_ENCRYPTION|BLK_ENCRYPTION|BLK_CRYPTO)=' \
-            .config || true
-
-      - name: Build kernel
-        working-directory: kernel
-        env:
-          ARCH: arm64
-          CROSS_COMPILE: aarch64-linux-gnu-
-        run: |
-          make -j"$(nproc)" \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            Image.gz \
-            dtbs
-
-      - name: Show build output
-        working-directory: kernel
-        run: |
-          echo "=== Kernel ==="
-          ls -lh arch/arm64/boot/Image*
-
-          echo
-          echo "=== Device trees ==="
+          echo "=== DTBs ==="
           find arch/arm64/boot/dts \
             -type f \
             \( -name '*.dtb' -o -name '*.dtbo' \) \
             -print
 
-      - name: Collect kernel artifacts
-        run: |
-          mkdir -p out
-
-          cp kernel/arch/arm64/boot/Image.gz \
-            out/Image.gz
-
-          if [ -f kernel/arch/arm64/boot/Image ]; then
-            cp kernel/arch/arm64/boot/Image \
-              out/Image
-          fi
-
-          if [ -d kernel/arch/arm64/boot/dts ]; then
-            find kernel/arch/arm64/boot/dts \
-              -type f \
-              \( -name '*.dtb' -o -name '*.dtbo' \) \
-              -exec cp --parents {} out/ \;
-          fi
-
-          cp kernel/.config \
-            out/kernel.config
-
-          git -C kernel rev-parse HEAD \
-            > out/kernel-commit.txt
-
-      - name: Package kernel
-        run: |
-          tar -czf \
-            rosemary-halium13-kernel.tar.gz \
-            -C out .
-
-      - name: Upload kernel
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: rosemary-halium13-kernel
+          name: rosemary-kernel
           path: |
-            rosemary-halium13-kernel.tar.gz
-            out/
-          if-no-files-found: error
+            kernel/arch/arm64/boot/Image.gz
+            kernel/arch/arm64/boot/dts/**/*.dtb
+            kernel/arch/arm64/boot/dts/**/*.dtbo
