@@ -10,15 +10,15 @@ jobs:
       - name: Checkout adaptation files
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install Build Dependencies
         run: |
           sudo apt update
-          sudo apt install -y debos qemu-user-static python3-parted python3-pip git
-           sudo pip3 install git+https://github.com --break-system-packages
+          sudo apt install -y debos qemu-user-static python3-parted python3-pip git python3-setuptools python3-wheel
+          sudo pip3 install --break-system-packages droidian-releng || sudo pip3 install --break-system-packages git+https://github.com
 
       - name: Clone Halium 13 Kernel
         run: |
-          git clone https://github.com -b lineage-20 kernel
+          git clone https://github.com --depth=1 kernel
 
       - name: Set up Kernel Defconfig for Droidian
         run: |
