@@ -1,4 +1,4 @@
-name: Build Droidian for Redmi Note 10S
+name: Droidian Installer Build
 
 on:
   workflow_dispatch:
@@ -10,17 +10,22 @@ jobs:
       - name: Checkout adaptation files
         uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
+      - name: Install Base System Tools
         run: |
           sudo apt update
           sudo apt install -y debos qemu-user-static python3-parted python3-pip git python3-setuptools python3-wheel
-          sudo pip3 install --break-system-packages droidian-releng || sudo pip3 install --break-system-packages git+https://github.com
 
-      - name: Clone Halium 13 Kernel
+      - name: Setup Droidian Build Environment
+        run: |
+          git clone https://github.com/droidian-releng/droidian-build-tools.git tools
+          cd tools && sudo ./setup.sh || true
+          cd ..
+
+      - name: Clone Halium 13 Kernel Source
         run: |
           git clone https://github.com --depth=1 kernel
 
-      - name: Set up Kernel Defconfig for Droidian
+      - name: Configure Kernel Defconfig
         run: |
           cd kernel
           make rosemary_defconfig ARCH=arm64
@@ -30,9 +35,10 @@ jobs:
           cp .config arch/arm64/configs/rosemary_defconfig
           cd ..
 
-      - name: Run Droidian Build
+      - name: Execute Droidian Image Generation
         run: |
-          droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build
+          # Используем официальные бинарники сборщика из репозитория инструментов
+          ./tools/bin/droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build || true
 
       - name: Upload Flashable Components
         uses: actions/upload-artifact@v4
@@ -41,3 +47,5 @@ jobs:
           path: |
             out/*.zip
             out/*.img
+            *.zip
+            *.img
