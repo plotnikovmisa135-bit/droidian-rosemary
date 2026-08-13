@@ -10,7 +10,7 @@ jobs:
       - name: Checkout adaptation files
         uses: actions/checkout@v4
 
-    - name: Install build dependencies
+      - name: Install build dependencies
         run: |
           sudo apt update
           sudo apt install -y debos qemu-user-static python3-parted python3-pip git
@@ -23,19 +23,15 @@ jobs:
       - name: Set up Kernel Defconfig for Droidian
         run: |
           cd kernel
-          # default config for rosemary
           make rosemary_defconfig ARCH=arm64
-          # turning on options for systemd/debian
           sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
           sed -i 's/# CONFIG_CGROUPS is not set/CONFIG_CGROUPS=y/' .config
           sed -i 's/# CONFIG_DEVTMPFS is not set/CONFIG_DEVTMPFS=y/' .config
-          # getting edited config back
           cp .config arch/arm64/configs/rosemary_defconfig
           cd ..
 
       - name: Run Droidian Build
         run: |
-          # start building Droidian for arm64 (Halium 13)
           droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build
 
       - name: Upload Flashable Components
