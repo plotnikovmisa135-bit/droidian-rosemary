@@ -58,6 +58,14 @@ jobs:
           grep -E \
             'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
             .config
+      - name: Check DVFSRC header
+        working-directory: kernel
+        run: |
+          echo "Searching for header..."
+          find . -type f -name 'helio-dvfsrc-qos.h' -print
+
+          echo "Checking DVFSRC directory..."
+          ls -la drivers/devfreq/helio-dvfsrc-v3/
 
       - name: Build kernel
         working-directory: kernel
