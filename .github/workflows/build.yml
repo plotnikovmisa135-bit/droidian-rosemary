@@ -58,7 +58,7 @@ jobs:
           grep -E \
             'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
             .config
- - name: Check DVFSRC header
+      - name: Check DVFSRC header
         working-directory: kernel
         run: |
           echo "Searching for header..."
@@ -90,12 +90,16 @@ jobs:
         run: |
           echo "=== Kernel ==="
           ls -lh arch/arm64/boot/Image*
-          
+
           echo
           echo "=== Device trees ==="
           find arch/arm64/boot/dts -type f \
             \( -name '*.dtb' -o -name '*.dtbo' \) \
             -print
+
+          echo
+          echo "=== Modules ==="
+          find . -name '*.ko' -type f | head -50
 
           echo
           echo "=== Modules ==="
