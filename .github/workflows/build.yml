@@ -45,18 +45,52 @@ jobs:
             include block drivers \
             2>/dev/null || true
 
-      - name: Fix DVFSRC header
+      - name: Fix DVFSRC headers
         working-directory: kernel
         run: |
           sed -i \
-            's/#include <helio-dvfsrc-qos\.h>/#include "helio-dvfsrc-qos.h"/' \
-            drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-qos.c
+            's/#include <helio-dvfsrc-qos\.h>/#include "helio-dvfsrc-qos.h"/g' \
+            drivers/devfreq/helio-dvfsrc-v3/*.c
 
-          echo "=== DVFSRC include ==="
-          grep -n \
-            'helio-dvfsrc-qos.h' \
-            drivers/devfreq/helio-dvfsrc-v3/helio-dvfsrc-qos.c
+          echo "=== DVFSRC includes ==="
+          grep -Rni 'helio-dvfsrc-qos.h' \
+            drivers/devfreq/helio-dvfsrc-v3/
 
+      - name: Disable broken block crypto
+        working-directory: kernel
+        run: |
+          ./scripts/config --disable BLK_CRYPTO
+          ./scripts/config --disable BLK_INLINE_ENCRYPTION
+          ./scripts/config --disable BLK_INLINE_ENCRYPTION_FALLBACK
+
+          make olddefconfig
+
+          echo "=== Crypto config ==="
+          grep -E \
+            'CONFIG_(BLK_CRYPTO|BLK_INLINE_ENCRYPTION|BLK_INLINE_ENCRYPTION_FALLBACK)=' \
+            .config || true
+            
+      - name: Inspect keyslot manager
+        working-directory: kernel
+        run: |
+          echo "=== ksm_flock ==="
+          grep -RniE 'ksm_flock|keyslot_manager' \
+            include/linux block drivers \
+            --exclude-dir=.git \
+            2>/dev/null | head -200
+
+          echo
+          echo "=== crypto/keyslot files ==="
+          find . -type f \
+            \( -iname '*keyslot*' -o -iname '*blk-crypto*' \) \
+            -print
+
+          echo
+          echo "=== relevant config ==="
+          grep -E \
+            'CONFIG_(BLK_CRYPTO|BLK_INLINE_ENCRYPTION|FS_ENCRYPTION)' \
+            .config || true
+            
       - name: Inspect keyslot manager
         working-directory: kernel
         run: |
