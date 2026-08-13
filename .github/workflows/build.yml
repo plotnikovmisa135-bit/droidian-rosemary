@@ -54,42 +54,63 @@ jobs:
 
           make olddefconfig
 
-          echo "=== Important configuration ==="
+          echo "=== Required configuration ==="
           grep -E \
             'CONFIG_(NAMESPACES|CGROUPS|DEVTMPFS|DEVTMPFS_MOUNT)=' \
             .config
-      - name: Check DVFSRC header
-        working-directory: kernel
-        run: |
-          echo "Searching for header..."
-          find . -type f -name 'helio-dvfsrc-qos.h' -print
 
-          echo "Checking DVFSRC directory..."
-          ls -la drivers/devfreq/helio-dvfsrc-v3/
-
+      # The MTK DVFSRC source includes its local header
+      # with <...>, so explicitly add its own directory.
       - name: Fix DVFSRC include path
         working-directory: kernel
         run: |
-          echo 'ccflags-y += -I$(src)' >> drivers/devfreq/helio-dvfsrc-v3/Makefile
-          echo "=== DVFSRC Makefile ==="
-          cat drivers/devfreq/helio-dvfsrc-v3/Makefile
-      - name: Check missing headers
+          echo 'ccflags-y += -I$(src)' \
+            >> drivers/devfreq/helio-dvfsrc-v3/Makefile
+
+      # The rosemary kernel tree contains a legacy MediaTek
+      # usb-tcpc driver which expects extcon_usb.h, but the
+      # header is absent from this tree.
+      #
+      # Disable only this optional driver for now so that the
+      # actual kernel can be produced.
+      - name: Disable broken legacy USB TCPC driver
         working-directory: kernel
         run: |
-          echo "=== extcon_usb.h ==="
-          find . -type f -name 'extcon_usb.h' -print
+          echo "=== extcon configuration ==="
 
-          echo
-          echo "=== keyslot-manager.h ==="
-          find . -type f -name 'keyslot-manager.h' -print
+          grep -Rni \
+            'CONFIG.*USB.*TCPC\|CONFIG.*TCPC\|USB_TCPC' \
+            drivers/extcon/mediatek \
+            drivers/extcon \
+            2>/dev/null || true
 
-          echo
-          echo "=== ksm_flock references ==="
-          grep -Rni "ksm_flock" include block drivers 2>/dev/null | head -100
+          ./scripts/config --disable MTK_USB_TCPC || true
+          ./scripts/config --disable USB_TCPC || true
 
-          echo
-          echo "=== DVFSRC include flags ==="
-          grep -n 'ccflags-y' drivers/devfreq/helio-dvfsrc-v3/Makefile
+          make olddefconfig
+
+      # This old kernel tree has a broken keyslot-manager
+      # declaration. Check whether block crypto is enabled,
+      # and disable it if necessary for producing the kernel.
+      - name: Disable broken block crypto path
+        working-directory: kernel
+        run: |
+          echo "=== Block crypto configuration ==="
+
+          grep -E \
+            'CONFIG_(BLK_DEV|BLK_INLINE|BLK_CRYPTO|FS_ENCRYPTION)' \
+            .config || true
+
+          ./scripts/config --disable BLK_INLINE_ENCRYPTION || true
+          ./scripts/config --disable BLK_ENCRYPTION || true
+          ./scripts/config --disable BLK_CRYPTO || true
+
+          make olddefconfig
+
+          echo "=== Result ==="
+          grep -E \
+            'CONFIG_(BLK_INLINE_ENCRYPTION|BLK_ENCRYPTION|BLK_CRYPTO)=' \
+            .config || true
 
       - name: Build kernel
         working-directory: kernel
@@ -100,17 +121,8 @@ jobs:
           make -j"$(nproc)" \
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            Image.gz dtbs modules
-      - name: Build kernel
-        working-directory: kernel
-        env:
-          ARCH: arm64
-          CROSS_COMPILE: aarch64-linux-gnu-
-        run: |
-          make -j"$(nproc)" \
-            ARCH=arm64 \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            Image.gz dtbs modules
+            Image.gz \
+            dtbs
 
       - name: Show build output
         working-directory: kernel
@@ -120,13 +132,11 @@ jobs:
 
           echo
           echo "=== Device trees ==="
-          find arch/arm64/boot/dts -type f \
+          find arch/arm64/boot/dts \
+            -type f \
             \( -name '*.dtb' -o -name '*.dtbo' \) \
             -print
 
-          echo
-          echo "=== Modules ==="
-          find . -name '*.ko' -type f | head -50
       - name: Collect kernel artifacts
         run: |
           mkdir -p out
@@ -139,34 +149,30 @@ jobs:
               out/Image
           fi
 
-          find kernel/arch/arm64/boot/dts \
-            -type f \
-            \( -name '*.dtb' -o -name '*.dtbo' \) \
-            -exec cp --parents {} out/ \;
+          if [ -d kernel/arch/arm64/boot/dts ]; then
+            find kernel/arch/arm64/boot/dts \
+              -type f \
+              \( -name '*.dtb' -o -name '*.dtbo' \) \
+              -exec cp --parents {} out/ \;
+          fi
 
-          find kernel \
-            -type f \
-            -name '*.ko' \
-            -exec cp --parents {} out/ \;
+          cp kernel/.config \
+            out/kernel.config
 
-          cp kernel/.config out/kernel.config
+          git -C kernel rev-parse HEAD \
+            > out/kernel-commit.txt
 
-          git -C kernel rev-parse HEAD > out/kernel-commit.txt
-
-      - name: Package artifacts
+      - name: Package kernel
         run: |
-          tar -czf rosemary-halium13-kernel.tar.gz -C out .
+          tar -czf \
+            rosemary-halium13-kernel.tar.gz \
+            -C out .
 
-      - name: Upload kernel artifacts
+      - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
           name: rosemary-halium13-kernel
           path: |
             rosemary-halium13-kernel.tar.gz
-            out/Image
-            out/Image.gz
-            out/kernel.config
-            out/kernel-commit.txt
-            out/arch/
+            out/
           if-no-files-found: error
-
