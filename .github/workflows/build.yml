@@ -52,7 +52,8 @@ jobs:
           ./scripts/config --enable DEVTMPFS
           ./scripts/config --enable DEVTMPFS_MOUNT
 
-          make olddefconfig
+          # Run non-interactive olddefconfig; pipe default answers to avoid CI TTY prompts
+          yes '' | make olddefconfig
 
           echo "=== Required configuration ==="
           grep -E \
@@ -87,7 +88,8 @@ jobs:
           ./scripts/config --disable MTK_USB_TCPC || true
           ./scripts/config --disable USB_TCPC || true
 
-          make olddefconfig
+          # Avoid interactive prompts in CI
+          yes '' | make olddefconfig
 
       # This old kernel tree has a broken keyslot-manager
       # declaration. Check whether block crypto is enabled,
@@ -105,7 +107,8 @@ jobs:
           ./scripts/config --disable BLK_ENCRYPTION || true
           ./scripts/config --disable BLK_CRYPTO || true
 
-          make olddefconfig
+          # Avoid interactive prompts in CI
+          yes '' | make olddefconfig
 
           echo "=== Result ==="
           grep -E \
