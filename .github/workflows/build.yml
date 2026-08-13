@@ -10,10 +10,10 @@ jobs:
       - name: Checkout adaptation files
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+    - name: Install build dependencies
         run: |
           sudo apt update
-          sudo apt install -y debos qemu-user-static pyparted python3-pip git
+          sudo apt install -y debos qemu-user-static python3-parted python3-pip git
           sudo pip3 install git+https://github.com --break-system-packages
 
       - name: Clone Halium 13 Kernel
