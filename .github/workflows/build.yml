@@ -63,12 +63,23 @@ jobs:
           ./scripts/config --disable BLK_INLINE_ENCRYPTION
           ./scripts/config --disable BLK_INLINE_ENCRYPTION_FALLBACK
 
+      - name: Disable block crypto
+        working-directory: kernel
+        run: |
+          echo "=== Before ==="
+          grep -E 'CONFIG_(BLK_CRYPTO|BLK_INLINE_ENCRYPTION|FS_ENCRYPTION)' .config || true
+
+          ./scripts/config --disable BLK_CRYPTO
+          ./scripts/config --disable BLK_INLINE_ENCRYPTION
+          ./scripts/config --disable BLK_INLINE_ENCRYPTION_FALLBACK
+
           make olddefconfig
 
-          echo "=== Crypto config ==="
-          grep -E \
-            'CONFIG_(BLK_CRYPTO|BLK_INLINE_ENCRYPTION|BLK_INLINE_ENCRYPTION_FALLBACK)=' \
-            .config || true
+          echo "=== After ==="
+          grep -E 'CONFIG_(BLK_CRYPTO|BLK_INLINE_ENCRYPTION|BLK_INLINE_ENCRYPTION_FALLBACK|FS_ENCRYPTION)' .config || true
+
+          echo "=== Checking whether blk-crypto is configured ==="
+          grep -n "blk-crypto" block/Makefile
             
       - name: Inspect keyslot manager
         working-directory: kernel
@@ -119,8 +130,16 @@ jobs:
         run: |
           make rosemary_defconfig
           make olddefconfig
+      - name: Verify crypto configuration
+        working-directory: kernel
+        run: |
+          echo "CONFIG_BLK_CRYPTO:"
+          grep '^CONFIG_BLK_CRYPTO=' .config || true
 
-      - name: Build
+          echo
+          echo "blk-crypto Makefile:"
+          grep -n -C 3 'blk-crypto' block/Makefile || true
+      - name: Build kernel
         working-directory: kernel
         env:
           ARCH: arm64
@@ -129,8 +148,7 @@ jobs:
           make -j"$(nproc)" \
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            Image.gz \
-            dtbs
+            Image.gz dtbs
 
       - name: Verify
         working-directory: kernel
