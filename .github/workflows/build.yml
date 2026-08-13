@@ -84,13 +84,23 @@ jobs:
           find . -type f -name 'keyslot-manager.h' -print
 
           echo
-          echo "=== DVFSRC include flags ==="
-          grep -n 'ccflags-y' drivers/devfreq/helio-dvfsrc-v3/Makefile
-      - name: Inspect ksm_flock
-        working-directory: kernel
-        run: |
           echo "=== ksm_flock references ==="
           grep -Rni "ksm_flock" include block drivers 2>/dev/null | head -100
+
+          echo
+          echo "=== DVFSRC include flags ==="
+          grep -n 'ccflags-y' drivers/devfreq/helio-dvfsrc-v3/Makefile
+
+      - name: Build kernel
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+        run: |
+          make -j"$(nproc)" \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            Image.gz dtbs modules
       - name: Build kernel
         working-directory: kernel
         env:
@@ -117,11 +127,6 @@ jobs:
           echo
           echo "=== Modules ==="
           find . -name '*.ko' -type f | head -50
-
-          echo
-          echo "=== Modules ==="
-          find . -name '*.ko' -type f | head -50
-
       - name: Collect kernel artifacts
         run: |
           mkdir -p out
