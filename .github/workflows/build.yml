@@ -17,13 +17,13 @@ jobs:
 
       - name: Setup Droidian Build Environment
         run: |
-          git clone https://https://gabutgadungan/android_kernel_xiaomi_rosemary tools
+          git clone https://gabutgadungan/android_kernel_xiaomi_rosemary tools
           cd tools && sudo ./setup.sh || true
           cd ..
 
       - name: Clone Halium 13 Kernel Source
         run: |
-          git clone --depth=1 https://https://gabutgadungan/android_kernel_xiaomi_rosemary kernel
+          git clone --depth=1 https://gabutgadungan/android_kernel_xiaomi_rosemary kernel
 
       - name: Configure Kernel Defconfig
         run: |
