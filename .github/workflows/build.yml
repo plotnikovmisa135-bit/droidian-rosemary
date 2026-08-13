@@ -1,0 +1,47 @@
+name: Build Droidian for Redmi Note 10S
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout adaptation files
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y debos qemu-user-static pyparted python3-pip git
+          sudo pip3 install git+https://github.com --break-system-packages
+
+      - name: Clone Halium 13 Kernel
+        run: |
+          git clone https://github.com -b lineage-20 kernel
+
+      - name: Set up Kernel Defconfig for Droidian
+        run: |
+          cd kernel
+          # Подставляем стандартный конфиг для rosemary
+          make rosemary_defconfig ARCH=arm64
+          # Включаем обязательные опции для systemd/debian
+          sed -i 's/# CONFIG_NAMESPACES is not set/CONFIG_NAMESPACES=y/' .config
+          sed -i 's/# CONFIG_CGROUPS is not set/CONFIG_CGROUPS=y/' .config
+          sed -i 's/# CONFIG_DEVTMPFS is not set/CONFIG_DEVTMPFS=y/' .config
+          # Возвращаем модифицированный конфиг обратно
+          cp .config arch/arm64/configs/rosemary_defconfig
+          cd ..
+
+      - name: Run Droidian Build
+        run: |
+          # start building Droidian for arm64 (Halium 13)
+          droidian-releng --component=main --architecture=arm64 --device=rosemary --kernel-dir=./kernel build
+
+      - name: Upload Flashable Components
+        uses: actions/artifacts@v4
+        with:
+          name: Droidian-rosemary-Halium13
+          path: |
+            out/*.zip
+            out/*.img
